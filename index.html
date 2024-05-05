@@ -1,0 +1,248 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <canvas
+      id="canvas"
+      width="1200"
+      height="800"
+      style="border: 1px solid black"
+    ></canvas>
+
+    <script>
+      function randomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+
+      const minDistance = 25;
+      const minVisualDistance = 75;
+      const avoidfactor = 0.005;
+      const speedLimit = 15;
+      const centerFactor = 0.005;
+      const matchFactor = 0.05;
+      const flockSize = 250;
+      const depth = 800;
+
+      const flock = new Array(flockSize).fill(null).map((_) => {
+        const item = {};
+        item.x = Math.random() * canvas.width;
+        item.y = Math.random() * canvas.height;
+        item.z = Math.random() * depth;
+        item.dx = Math.random() * 10 - 5;
+        item.dy = Math.random() * 10 - 5;
+        item.dz = Math.random() + 10 - 5;
+        item.history = [];
+        return item;
+      });
+
+      const sigma = {};
+      sigma.x = Math.random() * canvas.width;
+      sigma.y = Math.random() * canvas.height;
+      sigma.z = Math.random() * depth;
+      sigma.dx = Math.random() * 10 - 5;
+      sigma.dy = Math.random() * 10 - 5;
+      sigma.dz = Math.random() + 10 - 5;
+      sigma.isSigma = true;
+      sigma.history = [];
+      flock.push(sigma);
+
+      function drawArrow(x, y, z, angle, isSigma, history) {
+        const width = 10 * (z / depth);
+        const length = 10 * (z / depth);
+        ctx.beginPath();
+        ctx.moveTo(x + length * Math.cos(angle), y + length * Math.sin(angle));
+        ctx.lineTo(
+          x + width * Math.cos(angle + 0.5 * Math.PI),
+          y + width * Math.sin(angle + 0.5 * Math.PI)
+        );
+        ctx.lineTo(
+          x + width * Math.cos(angle - 0.5 * Math.PI),
+          y + width * Math.sin(angle - 0.5 * Math.PI)
+        );
+        ctx.closePath();
+        ctx.fillStyle = isSigma ? "blue" : "red";
+        ctx.fill();
+
+        if (history.length) {
+          ctx.beginPath();
+          ctx.moveTo(history[0].x, history[0].y);
+
+          history.forEach(({ x, y, z }) => {
+            // Draw a line from point (50, 50) to (350, 150)
+
+            //ctx.moveTo(, 50);
+            ctx.lineWidth = (5 * z) / depth;
+            ctx.strokeStyle = "rgba(100, 100, 255, " + z / depth + ")";
+
+            ctx.lineTo(x, y);
+            ctx.stroke();
+          });
+        }
+      }
+
+      function calculateDistance(birdA, birdB) {
+        return Math.sqrt(
+          Math.pow(birdA.x - birdB.x, 2) +
+            Math.pow(birdA.y - birdB.y, 2) +
+            Math.pow(birdA.z - birdB.z, 2)
+        );
+      }
+
+      function limitSpeed(bird) {
+        bird.dx = Math.min(bird.dx, speedLimit);
+        bird.dy = Math.min(bird.dy, speedLimit);
+        bird.dz = Math.min(bird.dz, speedLimit);
+      }
+
+      function keepInBox(bird) {
+        const margin = 200;
+        const turnFactor = 1;
+
+        if (bird.x < margin) {
+          bird.dx += turnFactor;
+        }
+        if (bird.x > canvas.width - margin) {
+          bird.dx -= turnFactor;
+        }
+        if (bird.y < margin) {
+          bird.dy += turnFactor;
+        }
+        if (bird.y > canvas.height - margin) {
+          bird.dy -= turnFactor;
+        }
+        if (bird.z < margin) {
+          bird.dz += turnFactor;
+        }
+        if (bird.z > depth - margin) {
+          bird.dz -= turnFactor;
+        }
+      }
+
+      function avoidOthers(bird) {
+        let closeX = 0;
+        let closeY = 0;
+        let closeZ = 0;
+
+        flock
+          .filter((otherBird) => otherBird !== bird)
+          .filter((otherBird) => {
+            const dist = calculateDistance(bird, otherBird);
+            return dist < minDistance;
+          })
+          .forEach((otherBird) => {
+            closeX += bird.x - otherBird.x;
+            closeY += bird.y - otherBird.y;
+            closeZ += bird.z - otherBird.z;
+          });
+
+        bird.dx += closeX * avoidfactor;
+        bird.dy += closeY * avoidfactor;
+        bird.dz += closeZ * avoidfactor;
+      }
+
+      function matchDirection(bird) {
+        let avgX = 0;
+        let avgY = 0;
+        let avgZ = 0;
+        let nearbyBirds = 0;
+
+        flock
+          .filter((otherBird) => otherBird !== bird)
+          .filter((otherBird) => {
+            const dist = calculateDistance(bird, otherBird);
+            return dist < minVisualDistance;
+          })
+          .forEach((otherBird) => {
+            avgX += otherBird.x;
+            avgY += otherBird.y;
+            avgZ += otherBird.z;
+            nearbyBirds += 1;
+          });
+
+        if (nearbyBirds) {
+          avgX = avgX / nearbyBirds;
+          avgY = avgY / nearbyBirds;
+          avgZ = avgZ / nearbyBirds;
+
+          bird.dx += (avgX - bird.x) * centerFactor;
+          bird.dy += (avgY - bird.y) * centerFactor;
+          bird.dz += (avgZ - bird.z) * centerFactor;
+        }
+      }
+
+      function matchSpeed(bird) {
+        let avgDX = 0;
+        let avgDY = 0;
+        let avgDZ = 0;
+        let nearbyBirds = 0;
+
+        flock
+          .filter((otherBird) => otherBird !== bird)
+          .filter((otherBird) => {
+            const dist = calculateDistance(bird, otherBird);
+            return dist < minVisualDistance;
+          })
+          .forEach((otherBird) => {
+            avgDX += otherBird.dx;
+            avgDY += otherBird.dy;
+            avgDZ += otherBird.dz;
+            nearbyBirds += 1;
+          });
+
+        if (nearbyBirds) {
+          avgDX = avgDX / nearbyBirds;
+          avgDY = avgDY / nearbyBirds;
+          avgDZ = avgDZ / nearbyBirds;
+
+          bird.dx += (avgDX - bird.dx) * matchFactor;
+          bird.dy += (avgDY - bird.dy) * matchFactor;
+          bird.dz += (avgDZ - bird.dz) * matchFactor;
+        }
+      }
+
+      let count = 0;
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        flock.forEach((bird) => {
+          if (!bird.isSigma) {
+            matchDirection(bird);
+            avoidOthers(bird);
+            matchSpeed(bird);
+          }
+
+          limitSpeed(bird);
+          keepInBox(bird);
+
+          bird.history.push({ x: bird.x, y: bird.y, z: bird.z });
+
+          bird.x += bird.dx;
+          bird.y += bird.dy;
+          bird.z += bird.dz;
+
+          drawArrow(
+            bird.x,
+            bird.y,
+            bird.z,
+            Math.atan2(bird.dy, bird.dx),
+            bird.isSigma,
+            bird.history
+          );
+
+          bird.history = bird.history.slice(-5);
+        });
+
+        requestAnimationFrame(draw);
+      }
+
+      draw();
+    </script>
+  </body>
+</html>
