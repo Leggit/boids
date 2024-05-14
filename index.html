@@ -2,34 +2,159 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>Boids</title>
+    <style>
+      body {
+        background-color: rgb(13, 9, 23);
+        color: white;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      .flex {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      .input-group {
+        flex-basis: 25%;
+        border-radius: 16px;
+        background-color: rgb(54, 51, 51);
+        margin: 8px;
+        padding: 8px;
+        padding-left: 16px;
+        padding-right: 16px;
+        display: flex;
+        flex-direction: column;
+        text-align: center;
+      }
+      input[type="number"] {
+        border-radius: 8px;
+        padding: 8px;
+        box-shadow: none;
+        border: none;
+        font-weight: bold;
+        font-size: medium;
+        margin-bottom: 8px;
+        text-align: center;
+      }
+      input[type="number"]:focus {
+        border: none;
+      }
+      label {
+        margin-bottom: 4px;
+      }
+    </style>
   </head>
-  <body>
+  <body style="margin: 0; padding: 0">
     <canvas
       id="canvas"
       width="1200"
       height="800"
-      style="border: 1px solid black"
+      style="background-color: rgba(174, 211, 255, 0.833)"
     ></canvas>
 
-    <script>
-      function randomInt(min, max) {
-        return Math.floor(Math.random() * (max - min + 1)) + min;
-      }
+    <div class="flex">
+      <div class="input-group">
+        <label for="minDistance">Min distance</label>
+        <input
+          onchange="minDistance = event.target.value"
+          id="minDistance"
+          type="range"
+          min="0"
+          max="100"
+          value="25"
+        />
+      </div>
 
+      <div class="input-group">
+        <label for="visualDistance">Visual distance</label>
+        <input
+          onchange="minVisualDistance = event.target.value"
+          id="visualDistance"
+          type="range"
+          min="0"
+          max="150"
+          value="75"
+        />
+      </div>
+
+      <div class="input-group">
+        <label for="avoidFactor">Avoidance factor</label>
+        <input
+          onchange="avoidfactor = event.target.value * 0.001"
+          id="avoidFactor"
+          type="range"
+          min="0"
+          max="10"
+          value="5"
+        />
+      </div>
+
+      <div class="input-group">
+        <label for="centeringFactor">Centering factor</label>
+        <input
+          onchange="centerFactor = event.target.value * 0.001"
+          id="centeringFactor"
+          type="range"
+          min="0"
+          max="10"
+          value="5"
+        />
+      </div>
+
+      <div class="input-group">
+        <label for="speedMatchFactor">Speed match factor</label>
+        <input
+          onchange="matchFactor = event.target.value * 0.0001"
+          id="speedMatchFactor"
+          type="range"
+          min="0"
+          max="1000"
+          value="500"
+        />
+      </div>
+
+      <div class="input-group">
+        <label for="speedLimit">Speed limit</label>
+        <input
+          onchange="speedLimit = event.target.value"
+          id="speedLimit"
+          type="range"
+          min="1"
+          max="15"
+          value="5"
+        />
+      </div>
+
+      <div class="input-group">
+        <label for="flockSize">Flock size</label>
+        <input
+          onchange="handleFlockSizeChange(event.target)"
+          id="flockSize"
+          type="number"
+          min="2"
+          max="500"
+          value="250"
+        />
+      </div>
+    </div>
+
+    <script>
       const canvas = document.getElementById("canvas");
+
+      canvas.width = window.visualViewport.width;
+      canvas.height = window.innerHeight * 0.7;
+
       const ctx = canvas.getContext("2d");
 
-      const minDistance = 25;
-      const minVisualDistance = 75;
-      const avoidfactor = 0.005;
-      const speedLimit = 15;
-      const centerFactor = 0.005;
-      const matchFactor = 0.05;
+      let minDistance = 25;
+      let minVisualDistance = 75;
+      let avoidfactor = 0.005;
+      let speedLimit = 5;
+      let centerFactor = 0.005;
+      let matchFactor = 0.05;
       const flockSize = 250;
       const depth = 800;
 
-      const flock = new Array(flockSize).fill(null).map((_) => {
+      function makeBird() {
         const item = {};
         item.x = Math.random() * canvas.width;
         item.y = Math.random() * canvas.height;
@@ -39,20 +164,30 @@
         item.dz = Math.random() + 10 - 5;
         item.history = [];
         return item;
-      });
+      }
 
-      const sigma = {};
-      sigma.x = Math.random() * canvas.width;
-      sigma.y = Math.random() * canvas.height;
-      sigma.z = Math.random() * depth;
-      sigma.dx = Math.random() * 10 - 5;
-      sigma.dy = Math.random() * 10 - 5;
-      sigma.dz = Math.random() + 10 - 5;
-      sigma.isSigma = true;
-      sigma.history = [];
-      flock.push(sigma);
+      const flock = new Array(flockSize).fill(null).map((_) => makeBird());
 
-      function drawArrow(x, y, z, angle, isSigma, history) {
+      function handleFlockSizeChange(input) {
+        if (
+          input.value < 2 ||
+          input.value > 500 ||
+          parseInt(input.value) != input.value
+        ) {
+          input.value = flock.length;
+        }
+        if (flock.length < input.value) {
+          while (flock.length < input.value) {
+            flock.push(makeBird());
+          }
+        } else {
+          while (flock.length > input.value) {
+            flock.pop();
+          }
+        }
+      }
+
+      function drawArrow(x, y, z, angle, history) {
         const width = 10 * (z / depth);
         const length = 10 * (z / depth);
         ctx.beginPath();
@@ -66,7 +201,7 @@
           y + width * Math.sin(angle - 0.5 * Math.PI)
         );
         ctx.closePath();
-        ctx.fillStyle = isSigma ? "blue" : "red";
+        ctx.fillStyle = "red";
         ctx.fill();
 
         if (history.length) {
@@ -101,7 +236,7 @@
       }
 
       function keepInBox(bird) {
-        const margin = 200;
+        const margin = 100;
         const turnFactor = 1;
 
         if (bird.x < margin) {
@@ -212,11 +347,9 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         flock.forEach((bird) => {
-          if (!bird.isSigma) {
-            matchDirection(bird);
-            avoidOthers(bird);
-            matchSpeed(bird);
-          }
+          matchDirection(bird);
+          avoidOthers(bird);
+          matchSpeed(bird);
 
           limitSpeed(bird);
           keepInBox(bird);
@@ -232,11 +365,10 @@
             bird.y,
             bird.z,
             Math.atan2(bird.dy, bird.dx),
-            bird.isSigma,
             bird.history
           );
 
-          bird.history = bird.history.slice(-5);
+          bird.history = bird.history.slice(-1);
         });
 
         requestAnimationFrame(draw);
